@@ -1,0 +1,7 @@
+﻿components/RefundForm.tsx(13,26): error TS7006: Parameter 'dateStr' implicitly has an 'any' type.
+components/RefundForm.tsx(22,21): error TS2362: The left-hand side of an arithmetic operation must be of type 'any', 'number', 'bigint' or an enum type.
+components/RefundForm.tsx(22,29): error TS2363: The right-hand side of an arithmetic operation must be of type 'any', 'number', 'bigint' or an enum type.
+components/RefundForm.tsx(70,25): error TS7006: Parameter 'e' implicitly has an 'any' type.
+components/RefundForm.tsx(77,23): error TS7006: Parameter 'e' implicitly has an 'any' type.
+components/RefundForm.tsx(108,31): error TS7006: Parameter 'e' implicitly has an 'any' type.
+components/RefundForm.tsx(124,53): error TS2339: Property 'name' does not exist on type 'never'.

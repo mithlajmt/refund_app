@@ -10,7 +10,7 @@ const REFUND_REASONS = [
   "Other",
 ];
 
-function isOutside90Days(dateStr) {
+function isOutside90Days(dateStr: string) {
   if (!dateStr) return false;
 
   const booking = new Date(dateStr);
@@ -19,7 +19,7 @@ function isOutside90Days(dateStr) {
   booking.setHours(0, 0, 0, 0);
   today.setHours(0, 0, 0, 0);
 
-  const diffDays = (today - booking) / (1000 * 60 * 60 * 24);
+  const diffDays = (today.getTime() - booking.getTime()) / (1000 * 60 * 60 * 24);
   return diffDays > 90;
 }
 
@@ -27,7 +27,15 @@ export default function RefundForm() {
   const router = useRouter();
   const fileRef = useRef(null);
 
-  const [form, setForm] = useState({
+  const [form, setForm] = useState<{
+    full_name: string;
+    email: string;
+    booking_ref: string;
+    booking_date: string;
+    refund_reason: string;
+    additional_details: string;
+    file: File | null;
+  }>({
     full_name: "",
     email: "",
     booking_ref: "",
@@ -67,15 +75,15 @@ export default function RefundForm() {
     return e;
   };
 
-  const handleChange = (e) => {
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
 
     setForm((prev) => ({ ...prev, [name]: value }));
     setErrors((prev) => ({ ...prev, [name]: "" }));
   };
 
-  const handleFile = (e) => {
-    const file = e.target.files[0];
+  const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
 
     setErrors((prev) => ({ ...prev, file: "" }));
 
@@ -105,7 +113,7 @@ export default function RefundForm() {
     if (fileRef.current) (fileRef.current as HTMLInputElement).value = "";
   };
 
-  const handleSubmit = async (e) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     const errs = validate();
