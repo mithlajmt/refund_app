@@ -1,6 +1,7 @@
 "use client";
 import { useState, useRef } from "react";
 import { useRouter } from "next/navigation";
+import { supabase } from "@/lib/supabase";
 
 const REFUND_REASONS = [
   "Property Issue",
@@ -11,10 +12,14 @@ const REFUND_REASONS = [
 
 function isOutside90Days(dateStr) {
   if (!dateStr) return false;
+
   const booking = new Date(dateStr);
   const today = new Date();
-  const diffMs = today - booking;
-  const diffDays = diffMs / (1000 * 60 * 60 * 24);
+
+  booking.setHours(0, 0, 0, 0);
+  today.setHours(0, 0, 0, 0);
+
+  const diffDays = (today - booking) / (1000 * 60 * 60 * 24);
   return diffDays > 90;
 }
 
@@ -23,12 +28,12 @@ export default function RefundForm() {
   const fileRef = useRef(null);
 
   const [form, setForm] = useState({
-    fullName: "",
+    full_name: "",
     email: "",
-    bookingRef: "",
-    bookingDate: "",
-    reason: "",
-    details: "",
+    booking_ref: "",
+    booking_date: "",
+    refund_reason: "",
+    additional_details: "",
     file: null,
   });
 
@@ -36,30 +41,48 @@ export default function RefundForm() {
   const [loading, setLoading] = useState(false);
   const [fileName, setFileName] = useState("");
 
-  const outside90 = isOutside90Days(form.bookingDate);
+  const outside90 = isOutside90Days(form.booking_date);
+  const isFutureDate = form.booking_date && form.booking_date > new Date().toISOString().split("T")[0];
 
   const validate = () => {
-    const e = {};
-    if (!form.fullName.trim()) e.fullName = "Full name is required";
+    const e: Record<string, string> = {};
+
+    if (!form.full_name.trim()) e.full_name = "Full name is required";
+
     if (!form.email.trim()) e.email = "Email is required";
     else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email))
       e.email = "Enter a valid email";
-    if (!form.bookingRef.trim()) e.bookingRef = "Booking reference is required";
-    if (!form.bookingDate) e.bookingDate = "Booking date is required";
-    if (!form.reason) e.reason = "Please select a reason";
-    if (!form.details.trim()) e.details = "Please provide additional details";
+
+    if (!form.booking_ref.trim())
+      e.booking_ref = "Booking reference is required";
+
+    if (!form.booking_date) {
+      e.booking_date = "Booking date is required";
+    }
+
+    if (!form.refund_reason)
+      e.refund_reason = "Please select a reason";
+
     return e;
   };
 
   const handleChange = (e) => {
     const { name, value } = e.target;
+
     setForm((prev) => ({ ...prev, [name]: value }));
     setErrors((prev) => ({ ...prev, [name]: "" }));
   };
 
   const handleFile = (e) => {
     const file = e.target.files[0];
+
     if (file) {
+      // ✅ Added file size validation (no UI change)
+      if (file.size > 10 * 1024 * 1024) {
+        alert("File must be under 10MB");
+        return;
+      }
+
       setForm((prev) => ({ ...prev, file }));
       setFileName(file.name);
     }
@@ -67,34 +90,26 @@ export default function RefundForm() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+
     const errs = validate();
     if (Object.keys(errs).length > 0) {
       setErrors(errs);
       return;
     }
+
     setLoading(true);
+
     try {
-      const formData = new FormData();
-      Object.entries(form).forEach(([key, val]) => {
-        if (val) formData.append(key, val);
-      });
+      console.log(form); // next: supabase
 
-      const res = await fetch("/api/submit-refund", {
-        method: "POST",
-        body: formData,
-      });
-
-      if (!res.ok) throw new Error("Submission failed");
-      const data = await res.json();
 
       const params = new URLSearchParams({
-        fullName: form.fullName,
+        full_name: form.full_name,
         email: form.email,
-        bookingRef: form.bookingRef,
-        bookingDate: form.bookingDate,
-        reason: form.reason,
-        details: form.details,
-        id: data.id || "",
+        booking_ref: form.booking_ref,
+        booking_date: form.booking_date,
+        refund_reason: form.refund_reason,
+        additional_details: form.additional_details,
       });
 
       router.push(`/success?${params.toString()}`);
@@ -121,14 +136,10 @@ export default function RefundForm() {
         </div>
 
         {/* 90-day warning banner */}
-        {outside90 && (
+        {outside90 && !isFutureDate && (
           <div className="mb-6 flex gap-3 items-start bg-yellow-50 border border-yellow-300 text-yellow-800 rounded-xl px-4 py-3 text-sm">
             <span className="mt-0.5 text-yellow-500">
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                <path d="M8 1.5L1.5 13.5h13L8 1.5z" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />
-                <path d="M8 6v3.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
-                <circle cx="8" cy="11.5" r="0.6" fill="currentColor" />
-              </svg>
+              ⚠️
             </span>
             <span>
               Your booking is outside the standard refund window. Your request
@@ -137,9 +148,26 @@ export default function RefundForm() {
           </div>
         )}
 
+        {/* Future date warning banner */}
+        {isFutureDate && (
+          <div className="mb-6 flex gap-3 items-start bg-blue-50 border border-blue-300 text-blue-800 rounded-xl px-4 py-3 text-sm">
+            <span className="mt-0.5 text-blue-500">
+              ℹ️
+            </span>
+            <span>
+              Date is from a future date.
+            </span>
+          </div>
+        )}
+
         {/* Form card */}
         <form
           onSubmit={handleSubmit}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && (e.target as HTMLElement).tagName !== 'TEXTAREA') {
+              e.preventDefault();
+            }
+          }}
           className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6 space-y-5"
         >
           {/* Full Name */}
@@ -149,15 +177,15 @@ export default function RefundForm() {
             </label>
             <input
               type="text"
-              name="fullName"
-              value={form.fullName}
+              name="full_name"
+              value={form.full_name}
               onChange={handleChange}
               placeholder="John Doe"
-              className={`w-full rounded-lg border px-3 py-2.5 text-sm text-gray-900 outline-none transition focus:ring-2 focus:ring-indigo-400 focus:border-transparent ${errors.fullName ? "border-red-400 bg-red-50" : "border-gray-300 bg-gray-50"
+              className={`w-full rounded-lg border px-3 py-2.5 text-sm text-gray-900 outline-none transition focus:ring-2 focus:ring-indigo-400 focus:border-transparent ${errors.full_name ? "border-red-400 bg-red-50" : "border-gray-300 bg-gray-50"
                 }`}
             />
-            {errors.fullName && (
-              <p className="text-xs text-red-500 mt-1">{errors.fullName}</p>
+            {errors.full_name && (
+              <p className="text-xs text-red-500 mt-1">{errors.full_name}</p>
             )}
           </div>
 
@@ -180,7 +208,7 @@ export default function RefundForm() {
             )}
           </div>
 
-          {/* Booking Reference + Date (2 col) */}
+          {/* Booking Reference + Date */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -188,15 +216,15 @@ export default function RefundForm() {
               </label>
               <input
                 type="text"
-                name="bookingRef"
-                value={form.bookingRef}
+                name="booking_ref"
+                value={form.booking_ref}
                 onChange={handleChange}
                 placeholder="BK-123456"
-                className={`w-full rounded-lg border px-3 py-2.5 text-sm text-gray-900 outline-none transition focus:ring-2 focus:ring-indigo-400 focus:border-transparent ${errors.bookingRef ? "border-red-400 bg-red-50" : "border-gray-300 bg-gray-50"
+                className={`w-full rounded-lg border px-3 py-2.5 text-sm text-gray-900 outline-none transition focus:ring-2 focus:ring-indigo-400 focus:border-transparent ${errors.booking_ref ? "border-red-400 bg-red-50" : "border-gray-300 bg-gray-50"
                   }`}
               />
-              {errors.bookingRef && (
-                <p className="text-xs text-red-500 mt-1">{errors.bookingRef}</p>
+              {errors.booking_ref && (
+                <p className="text-xs text-red-500 mt-1">{errors.booking_ref}</p>
               )}
             </div>
 
@@ -206,15 +234,15 @@ export default function RefundForm() {
               </label>
               <input
                 type="date"
-                name="bookingDate"
-                value={form.bookingDate}
+                name="booking_date"
+                value={form.booking_date}
                 onChange={handleChange}
                 max={new Date().toISOString().split("T")[0]}
-                className={`w-full rounded-lg border px-3 py-2.5 text-sm text-gray-900 outline-none transition focus:ring-2 focus:ring-indigo-400 focus:border-transparent ${errors.bookingDate ? "border-red-400 bg-red-50" : "border-gray-300 bg-gray-50"
+                className={`w-full rounded-lg border px-3 py-2.5 text-sm text-gray-900 outline-none transition focus:ring-2 focus:ring-indigo-400 focus:border-transparent ${errors.booking_date ? "border-red-400 bg-red-50" : "border-gray-300 bg-gray-50"
                   }`}
               />
-              {errors.bookingDate && (
-                <p className="text-xs text-red-500 mt-1">{errors.bookingDate}</p>
+              {errors.booking_date && (
+                <p className="text-xs text-red-500 mt-1">{errors.booking_date}</p>
               )}
             </div>
           </div>
@@ -225,10 +253,10 @@ export default function RefundForm() {
               Refund Reason <span className="text-red-400">*</span>
             </label>
             <select
-              name="reason"
-              value={form.reason}
+              name="refund_reason"
+              value={form.refund_reason}
               onChange={handleChange}
-              className={`w-full rounded-lg border px-3 py-2.5 text-sm text-gray-900 outline-none transition focus:ring-2 focus:ring-indigo-400 focus:border-transparent ${errors.reason ? "border-red-400 bg-red-50" : "border-gray-300 bg-gray-50"
+              className={`w-full rounded-lg border px-3 py-2.5 text-sm text-gray-900 outline-none transition focus:ring-2 focus:ring-indigo-400 focus:border-transparent ${errors.refund_reason ? "border-red-400 bg-red-50" : "border-gray-300 bg-gray-50"
                 }`}
             >
               <option value="">Select a reason</option>
@@ -236,28 +264,24 @@ export default function RefundForm() {
                 <option key={r} value={r}>{r}</option>
               ))}
             </select>
-            {errors.reason && (
-              <p className="text-xs text-red-500 mt-1">{errors.reason}</p>
+            {errors.refund_reason && (
+              <p className="text-xs text-red-500 mt-1">{errors.refund_reason}</p>
             )}
           </div>
 
           {/* Additional Details */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Additional Details <span className="text-red-400">*</span>
+              Additional Details <span className="text-gray-400 font-normal">(optional)</span>
             </label>
             <textarea
-              name="details"
-              value={form.details}
+              name="additional_details"
+              value={form.additional_details}
               onChange={handleChange}
               rows={4}
               placeholder="Please describe your issue in detail..."
-              className={`w-full rounded-lg border px-3 py-2.5 text-sm text-gray-900 outline-none transition focus:ring-2 focus:ring-indigo-400 focus:border-transparent resize-none ${errors.details ? "border-red-400 bg-red-50" : "border-gray-300 bg-gray-50"
-                }`}
+              className="w-full rounded-lg border px-3 py-2.5 text-sm text-gray-900 outline-none transition focus:ring-2 focus:ring-indigo-400 focus:border-transparent resize-none border-gray-300 bg-gray-50"
             />
-            {errors.details && (
-              <p className="text-xs text-red-500 mt-1">{errors.details}</p>
-            )}
           </div>
 
           {/* File Upload */}
